@@ -1,0 +1,23 @@
+<?xml version='1.0'?>
+ <package format='2'>
+ <name>hpp-toppra</name>
+ <version>0.0.0</version>
+ <description>Bridge between HPP and TOPPRA</description>
+
+ <maintainer email='jmirabel@eurekarobotics.com'>Joseph Mirabel</maintainer>
+ <license>LGPL</license>
+ <url type='website'>https://github.com/jmirabel/hpp-toppra</url>
+
+
+ <author>Joseph Mirabel</author>
+
+ <buildtool_depend>catkin</buildtool_depend>
+
+ <build_depend>hpp-core</build_depend>
+ <exec_depend>hpp-core</exec_depend>
+ <build_export_depend>hpp-core</build_export_depend>
+
+ <build_depend>toppra</build_depend>
+ <exec_depend>toppra</exec_depend>
+ <build_export_depend>toppra</build_export_depend>
+ </package>
