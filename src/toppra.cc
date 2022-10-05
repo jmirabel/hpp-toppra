@@ -265,16 +265,17 @@ HPP_START_PARAMETER_DECLARATION(TOPPRA)
 Problem::declareParameter(ParameterDescription(Parameter::FLOAT,
                                                PARAM_HEAD "effortScale",
                                                "Effort rescaling value.",
-                                               Parameter((value_type)1)));
+                                               Parameter((value_type)-1)));
 Problem::declareParameter(ParameterDescription(Parameter::FLOAT,
                                                PARAM_HEAD "velocityScale",
                                                "Velocity rescaling value.",
                                                Parameter((value_type)1)));
 Problem::declareParameter(ParameterDescription(Parameter::INT,
                                                PARAM_HEAD "solver",
-                                               "0: GLPK\n"
-                                               "1: qpOASES",
-                                               Parameter((size_type)1)));
+                                               "0: Seidel\n"
+                                               "1: GLPK\n"
+                                               "2: qpOASES",
+                                               Parameter((size_type)0)));
 Problem::declareParameter(ParameterDescription(Parameter::INT, PARAM_HEAD "N",
                                                "Number of sampling point.",
                                                Parameter((size_type)50)));
