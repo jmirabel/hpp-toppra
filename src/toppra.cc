@@ -51,6 +51,8 @@
 #include <toppra/solver/seidel.hpp>
 #include <toppra/toppra.hpp>
 
+#include "piecewise-polynomial.hh"
+
 namespace hpp {
 namespace core {
 
@@ -115,6 +117,77 @@ class Extract : public TimeParameterization {
 #define PARAM_HEAD "PathOptimization/TOPPRA/"
 
 namespace pathOptimization {
+
+TimeParameterizationPtr_t constantAccelerationParametrization(
+    toppra::Vector const& t,
+    toppra::Vector const& s,
+    toppra::Vector const& sd)
+{
+  // Inputs
+  // int N
+  // s, sd, t
+  const size_type N = t.size() - 1;
+
+  // P_i(t) = c_0 + c_1 t + c_2 t**2
+  // P_i(t[i]) = s[i]
+  // P_i(t[i+1]) = s[i+1]
+  // P_i'(t[i]) = sd[i]
+  // P_i'(t[i+1]) = sd[i+1]
+  // P_i''(.) = u[i] = (sd[i+1]**2 - sd[i]**2) / (2 * (s[i+1]-s[i]))
+  //
+  // c_2 = 0.5 u[i]
+  // c_1 + 2 c_2 t[i] = sd[i]
+  // c_0 + c_1 t[i] + c_2 t[i]**2 = s[i]
+  constexpr int order = 2;
+  typedef timeParameterization::ShiftedPiecewisePolynomial<order> TimeParam_t;
+  auto c = TimeParam_t::ParameterMatrix_t(order + 1, N);
+  for (size_type i = 0; i < N; ++i) {
+    c(2, i) = (sd[i+1] - sd[i]) * (sd[i+1] + sd[i]) / (s[i+1] - s[i]) / 4;
+    c(1, i) = sd[i];
+    c(0, i) = s[i];
+  }
+
+  return std::make_shared<TimeParam_t>(c, t);
+}
+
+TimeParameterizationPtr_t hermiteCubicSplineParametrization(
+    toppra::Vector const& t,
+    toppra::Vector const& s,
+    toppra::Vector const& sd)
+{
+  // Inputs
+  // int N
+  // s, sd, t
+
+  const size_type N = t.size() - 1;
+
+  constexpr int order = 3;
+  typedef timeParameterization::PiecewisePolynomial<order> TimeParam_t;
+  auto spline_coeffs = TimeParam_t::ParameterMatrix_t(order + 1, N);
+  for (size_type i = 1; i <= N; ++i) {
+    const auto inv_dt = 1. / (t[i] - t[i - 1]);
+    const auto inv_dt2 = inv_dt * inv_dt;
+    const auto inv_dt3 = inv_dt2 * inv_dt;
+    const auto t_p = t[i - 1];
+    const auto t_p2 = t_p * t_p;
+    const auto t_p3 = t_p2 * t_p;
+    const auto ds = (s[i] - s[i - 1]);
+    const auto b = (2 * sd[i - 1] + sd[i]) * inv_dt;
+    const auto c = (sd[i - 1] + sd[i]) * inv_dt2;
+    spline_coeffs(0, i - 1) = 2 * t_p3 * ds * inv_dt3 +
+                              3 * t_p2 * ds * inv_dt2 - t_p3 * c - t_p2 * b -
+                              t_p * sd[i - 1] + s[i - 1];
+    spline_coeffs(1, i - 1) = -6 * t_p2 * ds * inv_dt3 -
+                              6 * t_p * ds * inv_dt2 + 3 * t_p2 * c +
+                              2 * t_p * b + sd[i - 1];
+    spline_coeffs(2, i - 1) =
+        6 * t_p * ds * inv_dt3 + 3 * ds * inv_dt2 - 3 * t_p * c - b;
+    spline_coeffs(3, i - 1) = -2 * ds * inv_dt3 + c;
+  }
+
+  return std::make_shared<TimeParam_t>(spline_coeffs, t);
+}
+
 PathVectorPtr_t TOPPRA::optimize(const PathVectorPtr_t& path) {
   const size_type solver =
       problem()->getParameter(PARAM_HEAD "solver").intValue();
@@ -124,6 +197,19 @@ PathVectorPtr_t TOPPRA::optimize(const PathVectorPtr_t& path) {
       problem()->getParameter(PARAM_HEAD "velocityScale").floatValue();
   const vector_t accLimits =
       problem()->getParameter(PARAM_HEAD "accelerationLimits").vectorValue();
+  const std::string interpolationMethod =
+      problem()->getParameter(PARAM_HEAD "interpolationMethod").stringValue();
+  bool constantAcceleration;
+  if (interpolationMethod == "hermite") {
+    constantAcceleration = false;
+  } else if (interpolationMethod == "constant_acceleration") {
+    constantAcceleration = true;
+  } else {
+    std::ostringstream oss;
+    oss << "Invalid interpolation method. Allowed values are 'hermite' and "
+      "'constant_acceleration'. Provided value: " << interpolationMethod;
+    throw std::invalid_argument(oss.str());
+  }
 
   using pinocchio::Model;
   const Model& model = problem()->robot()->model();
@@ -229,41 +315,24 @@ PathVectorPtr_t TOPPRA::optimize(const PathVectorPtr_t& path) {
   // 3.1 forward integration of time parameterization (trapezoidal integration)
   vector_t t = vector_t(N + 1);
   t[0] = 0.;  // start time is 0
+  const auto& s = out_data.gridpoints;
   for (size_type i = 1; i <= N; ++i) {
     const auto sd_avg = (sd[i - 1] + sd[i]) * 0.5;
-    const auto ds = out_data.gridpoints[i] - out_data.gridpoints[i - 1];
+    const auto ds = s[i] - s[i - 1];
     assert(sd_avg > 0.);
     const auto dt = ds / sd_avg;
     t[i] = t[i - 1] + dt;
   }
 
-  // 3.2 time parameterization based on hermite cubic spline interpolation
-  constexpr int order = 3;
-  typedef timeParameterization::PiecewisePolynomial<order> timeparam;
-  auto spline_coeffs = timeparam::ParameterMatrix_t(order + 1, N);
-  const auto& s = out_data.gridpoints;
-  for (size_type i = 1; i <= N; ++i) {
-    const auto inv_dt = 1. / (t[i] - t[i - 1]);
-    const auto inv_dt2 = inv_dt * inv_dt;
-    const auto inv_dt3 = inv_dt2 * inv_dt;
-    const auto t_p = t[i - 1];
-    const auto t_p2 = t_p * t_p;
-    const auto t_p3 = t_p2 * t_p;
-    const auto ds = (s[i] - s[i - 1]);
-    const auto b = (2 * sd[i - 1] + sd[i]) * inv_dt;
-    const auto c = (sd[i - 1] + sd[i]) * inv_dt2;
-    spline_coeffs(0, i - 1) = 2 * t_p3 * ds * inv_dt3 +
-                              3 * t_p2 * ds * inv_dt2 - t_p3 * c - t_p2 * b -
-                              t_p * sd[i - 1] + s[i - 1];
-    spline_coeffs(1, i - 1) = -6 * t_p2 * ds * inv_dt3 -
-                              6 * t_p * ds * inv_dt2 + 3 * t_p2 * c +
-                              2 * t_p * b + sd[i - 1];
-    spline_coeffs(2, i - 1) =
-        6 * t_p * ds * inv_dt3 + 3 * ds * inv_dt2 - 3 * t_p * c - b;
-    spline_coeffs(3, i - 1) = -2 * ds * inv_dt3 + c;
-  }
+  // 3.2 time parameterization based on
+  // - piecewise constant acceleration or
+  // - hermite cubic spline interpolation
+  TimeParameterizationPtr_t global;
+  if (constantAcceleration)
+    global = constantAccelerationParametrization(t, s, sd);
+  else
+    global = hermiteCubicSplineParametrization(t, s, sd);
 
-  TimeParameterizationPtr_t global(new timeparam(spline_coeffs, t));
   for (auto i = 0ul; i < paths.size(); ++i) {
     value_type t0 = t[id_subpaths[i]];
     value_type p0 = -gridpoints[id_subpaths[i]];
@@ -282,6 +351,11 @@ Problem::declareParameter(ParameterDescription(Parameter::VECTOR,
                                                PARAM_HEAD "accelerationLimits",
                                                "Define the acceleration limits.",
                                                Parameter(vector_t())));
+Problem::declareParameter(ParameterDescription(Parameter::STRING,
+                                               PARAM_HEAD "interpolationMethod",
+                                               "Define the interpolation method for the output of TOPPRA.\n"
+                                               "Accepted values are: \"hermite\", \"constant_acceleration\"",
+                                               Parameter(std::string("constant_acceleration"))));
 Problem::declareParameter(ParameterDescription(Parameter::FLOAT,
                                                PARAM_HEAD "effortScale",
                                                "Effort rescaling value.",
