@@ -29,6 +29,8 @@
 
 #include "toppra.hh"
 
+#include <sstream>
+
 #include <hpp/core/path-optimizer.hh>
 #include <hpp/core/path-vector.hh>
 #include <hpp/core/path.hh>
@@ -120,6 +122,8 @@ PathVectorPtr_t TOPPRA::optimize(const PathVectorPtr_t& path) {
       problem()->getParameter(PARAM_HEAD "effortScale").floatValue();
   const value_type velScale =
       problem()->getParameter(PARAM_HEAD "velocityScale").floatValue();
+  const vector_t accLimits =
+      problem()->getParameter(PARAM_HEAD "accelerationLimits").vectorValue();
 
   using pinocchio::Model;
   const Model& model = problem()->robot()->model();
@@ -127,19 +131,31 @@ PathVectorPtr_t TOPPRA::optimize(const PathVectorPtr_t& path) {
   using namespace toppra::constraint;
 
   // Create the TOPPRA constraints
-  auto torqueConstraint =
-      std::make_shared<jointTorque::Pinocchio<Model> >(model);  // No friction
-  torqueConstraint->lowerBounds(effortScale * torqueConstraint->lowerBounds());
-  torqueConstraint->upperBounds(effortScale * torqueConstraint->upperBounds());
+  toppra::LinearConstraintPtrs v;
 
-  toppra::LinearConstraintPtrs v{
+  // Joint velocity limits
+  v.push_back(
       std::make_shared<LinearJointVelocity>(-velScale * model.velocityLimit,
                                             velScale * model.velocityLimit)
-      //, std::make_shared<LinearJointAcceleration>(
-      //- 10 * model.velocityLimit, 10 * model.velocityLimit)
-      ,};
-  if (effortScale >= 0)
+  );
+  // Joint acceleration limits
+  if (accLimits.size() > 0) {
+    if (accLimits.size() != model.nv) {
+      std::ostringstream oss;
+      oss << "Acceleration limits should be of size " << model.nv << " and a "
+        "vector of size " << accLimits.size() << " is provided.";
+      throw std::invalid_argument(oss.str());
+    }
+    v.push_back(std::make_shared<LinearJointAcceleration>(-accLimits, accLimits));
+  }
+  // Joint torque limits
+  if (effortScale >= 0) {
+    auto torqueConstraint =
+        std::make_shared<jointTorque::Pinocchio<Model> >(model);  // No friction
+    torqueConstraint->lowerBounds(effortScale * torqueConstraint->lowerBounds());
+    torqueConstraint->upperBounds(effortScale * torqueConstraint->upperBounds());
     v.push_back(torqueConstraint);
+  }
 
   PathVectorPtr_t flatten_path =
       PathVector::create(path->outputSize(), path->outputDerivativeSize());
@@ -262,6 +278,10 @@ PathVectorPtr_t TOPPRA::optimize(const PathVectorPtr_t& path) {
 }
 
 HPP_START_PARAMETER_DECLARATION(TOPPRA)
+Problem::declareParameter(ParameterDescription(Parameter::VECTOR,
+                                               PARAM_HEAD "accelerationLimits",
+                                               "Define the acceleration limits.",
+                                               Parameter(vector_t())));
 Problem::declareParameter(ParameterDescription(Parameter::FLOAT,
                                                PARAM_HEAD "effortScale",
                                                "Effort rescaling value.",
