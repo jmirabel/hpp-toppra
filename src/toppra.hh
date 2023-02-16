@@ -47,6 +47,11 @@ class TOPPRA : public PathOptimizer {
 
   PathVectorPtr_t optimize(const PathVectorPtr_t &path);
 
+  // TODO remove when
+  // https://github.com/humanoid-path-planner/hpp-core/pull/305
+  // is released.
+  TimeParameterizationPtr_t lastTimeParameterization_;
+
  protected:
   using PathOptimizer::PathOptimizer;
 };  // class TOPPRA

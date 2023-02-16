@@ -345,6 +345,7 @@ PathVectorPtr_t TOPPRA::optimize(const PathVectorPtr_t& path) {
     res->appendPath(paths[i]);
   }
 
+  lastTimeParameterization_ = global;
   return res;
 }
 
