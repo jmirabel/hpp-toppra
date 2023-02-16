@@ -242,6 +242,8 @@ PathVectorPtr_t TOPPRA::optimize(const PathVectorPtr_t& path) {
     torqueConstraint->upperBounds(effortScale * torqueConstraint->upperBounds());
     v.push_back(torqueConstraint);
   }
+  for (auto& c : v)
+    c->discretizationType(toppra::Interpolation);
 
   PathVectorPtr_t flatten_path =
       PathVector::create(path->outputSize(), path->outputDerivativeSize());
