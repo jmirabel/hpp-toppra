@@ -22,6 +22,7 @@ compute_project_args(PROJECT_ARGS LANGUAGES CXX)
 project(${PROJECT_NAME} ${PROJECT_ARGS})
 
 add_project_dependency(hpp-core REQUIRED)
+add_project_dependency(hpp-manipulation REQUIRED)
 add_project_dependency(toppra REQUIRED)
 
 include(${HPP_CORE_CMAKE_PLUGIN})
@@ -72,10 +73,11 @@ endif()
 add_executable(unittests
   tests/tests.cc
   tests/test-ill-formed-paths.cc
+  tests/test-path-serialization.cc
   src/toppra.cc
 )
 add_test(unittests unittests)
-target_link_libraries(unittests hpp-core::hpp-core toppra::toppra Catch2::Catch2WithMain)
+target_link_libraries(unittests hpp-core::hpp-core hpp-manipulation::hpp-manipulation toppra::toppra Catch2::Catch2WithMain)
 
 project_install_component(toppra)
 install(FILES src/toppra.hh

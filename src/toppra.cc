@@ -52,6 +52,7 @@
 #include <toppra/toppra.hpp>
 
 #include "piecewise-polynomial.hh"
+#include "serialization.hh"
 
 namespace hpp {
 namespace core {
@@ -258,6 +259,19 @@ toppra::Vector evenlyTimeSpacedGridpoints(
   return gridpoints;
 }
 
+void TOPPRA::inputSerialization(PathPtr_t path) const {
+  const std::string filename =
+      problem()->getParameter(PARAM_HEAD "inputSerialization").stringValue();
+  if (filename.size() == 0)
+    return;
+
+  DevicePtr_t device(problem()->robot());
+  if (filename.substr(filename.size() - 4) == ".txt")
+    parser::serializePath<serialization::text_oarchive>(device, path, filename);
+  else
+    parser::serializePath<serialization::binary_oarchive>(device, path, filename);
+}
+
 toppra::LinearConstraintPtrs TOPPRA::constraints()
 {
   const value_type effortScale =
@@ -337,6 +351,8 @@ TOPPRA::GridpointMethod TOPPRA::gridpointMethod() const
 
 PathVectorPtr_t TOPPRA::optimize(const PathVectorPtr_t& path)
 {
+  inputSerialization(path);
+
   const size_type solver =
       problem()->getParameter(PARAM_HEAD "solver").intValue();
 
@@ -481,6 +497,11 @@ Problem::declareParameter(ParameterDescription(Parameter::INT,
 Problem::declareParameter(ParameterDescription(Parameter::INT, PARAM_HEAD "N",
                                                "Minimal number of sampling point.",
                                                Parameter((size_type)50)));
+Problem::declareParameter(ParameterDescription(Parameter::STRING,
+                                               PARAM_HEAD "inputSerialization",
+                                               "Filename where to serialize the input path. Leave empty to skip.\n"
+                                               "Text serialization is used if filename ends with '.txt'.",
+                                               Parameter(std::string(""))));
 HPP_END_PARAMETER_DECLARATION(TOPPRA)
 }  // namespace pathOptimization
 

@@ -67,6 +67,7 @@ class TOPPRA : public PathOptimizer {
   using PathOptimizer::PathOptimizer;
 
  private:
+  void inputSerialization(PathPtr_t path) const;
   toppra::LinearConstraintPtrs constraints();
   InterpolationMethod interpolationMethod() const;
   GridpointMethod gridpointMethod() const;
