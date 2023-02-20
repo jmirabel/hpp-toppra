@@ -43,6 +43,11 @@ typedef shared_ptr<TOPPRA> TOPPRAPtr_t;
 
 class TOPPRA : public PathOptimizer {
  public:
+   enum InterpolationMethod {
+     ConstantAcceleration,
+     Hermite,
+   };
+
   static TOPPRAPtr_t create(const ProblemConstPtr_t &p) {
     return TOPPRAPtr_t(new TOPPRA(p));
   }
@@ -59,6 +64,7 @@ class TOPPRA : public PathOptimizer {
 
  private:
   toppra::LinearConstraintPtrs constraints();
+  InterpolationMethod interpolationMethod() const;
 };  // class TOPPRA
 
 }  // namespace pathOptimization

@@ -233,6 +233,22 @@ toppra::LinearConstraintPtrs TOPPRA::constraints()
   return v;
 }
 
+TOPPRA::InterpolationMethod TOPPRA::interpolationMethod() const
+{
+  const std::string interpolationMethod =
+      problem()->getParameter(PARAM_HEAD "interpolationMethod").stringValue();
+  if (interpolationMethod == "hermite") {
+    return Hermite;
+  } else if (interpolationMethod == "constant_acceleration") {
+    return ConstantAcceleration;
+  } else {
+    std::ostringstream oss;
+    oss << "Invalid interpolationMethod. Allowed values are 'hermite' and "
+      "'constant_acceleration'. Provided value: " << interpolationMethod;
+    throw std::invalid_argument(oss.str());
+  }
+}
+
 PathVectorPtr_t TOPPRA::optimize(const PathVectorPtr_t& path)
 {
   const size_type solver =
@@ -338,10 +354,14 @@ PathVectorPtr_t TOPPRA::optimize(const PathVectorPtr_t& path)
   // - piecewise constant acceleration or
   // - hermite cubic spline interpolation
   TimeParameterizationPtr_t global;
-  if (constantAcceleration)
-    global = constantAccelerationParametrization(t, s, sd);
-  else
-    global = hermiteCubicSplineParametrization(t, s, sd);
+  switch(interpolationMethod()) {
+    case ConstantAcceleration:
+      global = constantAccelerationParametrization(t, s, sd);
+      break;
+    case Hermite:
+      global = hermiteCubicSplineParametrization(t, s, sd);
+      break;
+  }
 
   for (auto i = 0ul; i < paths.size(); ++i) {
     value_type t0 = t[id_subpaths[i]];
@@ -382,7 +402,7 @@ Problem::declareParameter(ParameterDescription(Parameter::INT,
                                                "2: qpOASES",
                                                Parameter((size_type)0)));
 Problem::declareParameter(ParameterDescription(Parameter::INT, PARAM_HEAD "N",
-                                               "Number of sampling point.",
+                                               "Minimal number of sampling point.",
                                                Parameter((size_type)50)));
 HPP_END_PARAMETER_DECLARATION(TOPPRA)
 }  // namespace pathOptimization
