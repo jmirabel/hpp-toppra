@@ -188,6 +188,76 @@ TimeParameterizationPtr_t hermiteCubicSplineParametrization(
   return std::make_shared<TimeParam_t>(spline_coeffs, t);
 }
 
+/// \param[out] id_subpaths \c id_subpaths[i] the index in gridpoints that
+///             corresponds to the start of \c paths[i]
+toppra::Vector evenlySpacedGridpoints(
+    std::vector<PathPtr_t> const& paths,
+    size_type const N,
+    value_type const maxSegmentLength,
+    std::vector<size_type>& id_subpaths)
+{
+  std::vector<value_type> S;
+  S.reserve(N + paths.size() - 1);
+
+  id_subpaths.reserve(paths.size() + 1);
+
+  S.push_back(0.);
+  id_subpaths.push_back(0);
+  for (PathPtr_t const& subpath : paths) {
+    auto I = subpath->paramRange();
+    value_type pathS = I.second - I.first;
+    size_type n = size_type(std::ceil(pathS / maxSegmentLength));
+    value_type p0 = S.back();
+    for (size_type k = 1; k <= n; ++k)
+      S.push_back(p0 + (pathS * (value_type)k) / (value_type)n);
+    id_subpaths.push_back(S.size() - 1);
+  }
+  return toppra::Vector(Eigen::Map<toppra::Vector>(S.data(), S.size()));
+}
+
+/// \param[out] id_subpaths \c id_subpaths[i] the index in gridpoints that
+///             corresponds to the start of \c paths[i]
+toppra::Vector evenlyTimeSpacedGridpoints(
+    std::shared_ptr<PathWrapper> pathWrapper,
+    std::vector<PathPtr_t> const& paths,
+    size_type const N,
+    value_type const maxSegmentLength,
+    std::vector<size_type>& id_subpaths)
+{
+  toppra::Vector initialS(paths.size() + 1);
+
+  //id_subpaths.reserve(paths.size() + 1);
+
+  initialS[0] = 0.0;
+  //id_subpaths.push_back(0);
+  for (auto i = 0ul; i < paths.size(); ++i)
+    initialS[i+1] = initialS[i] + paths[i]->length();
+
+  const double maxErrorThreshold = 1e-4;
+  const int maxIterations = 100;
+  toppra::Vector gridpoints (pathWrapper->proposeGridpoints(
+      maxErrorThreshold,
+      maxIterations,
+      maxSegmentLength,
+      static_cast<int>(N),
+      initialS));
+  // id_subpaths[i] is the index in gridpoints that corresponds to the start of paths[i], aka initialS[i]
+  int k = 0;
+  for (int i = 0; i < initialS.size(); ++i) {
+    bool found = false;
+    for (; k < gridpoints.size(); ++k) {
+      if (gridpoints[k] == initialS[i]) {
+        found = true;
+        break;
+      }
+    }
+    if (!found)
+      throw std::logic_error("Initial gridpoints not found in proposed gridpoints.");
+    id_subpaths[i] = k;
+  }
+  return gridpoints;
+}
+
 toppra::LinearConstraintPtrs TOPPRA::constraints()
 {
   const value_type effortScale =
@@ -249,23 +319,26 @@ TOPPRA::InterpolationMethod TOPPRA::interpolationMethod() const
   }
 }
 
+TOPPRA::GridpointMethod TOPPRA::gridpointMethod() const
+{
+  const std::string gridpointMethod =
+      problem()->getParameter(PARAM_HEAD "gridpointMethod").stringValue();
+  if (gridpointMethod == "param_space") {
+    return EvenlyParamSpaced;
+  } else if (gridpointMethod == "time_space") {
+    return EvenlyTimeSpaced;
+  } else {
+    std::ostringstream oss;
+    oss << "Invalid gridpointMethod (method to generate gridpoints). Allowed values are 'param_space' and "
+      "'time_space'. Provided value: " << gridpointMethod;
+    throw std::invalid_argument(oss.str());
+  }
+}
+
 PathVectorPtr_t TOPPRA::optimize(const PathVectorPtr_t& path)
 {
   const size_type solver =
       problem()->getParameter(PARAM_HEAD "solver").intValue();
-  const std::string interpolationMethod =
-      problem()->getParameter(PARAM_HEAD "interpolationMethod").stringValue();
-  bool constantAcceleration;
-  if (interpolationMethod == "hermite") {
-    constantAcceleration = false;
-  } else if (interpolationMethod == "constant_acceleration") {
-    constantAcceleration = true;
-  } else {
-    std::ostringstream oss;
-    oss << "Invalid interpolation method. Allowed values are 'hermite' and "
-      "'constant_acceleration'. Provided value: " << interpolationMethod;
-    throw std::invalid_argument(oss.str());
-  }
 
   toppra::LinearConstraintPtrs v = std::move(constraints());
 
@@ -280,33 +353,30 @@ PathVectorPtr_t TOPPRA::optimize(const PathVectorPtr_t& path)
 
   size_type N = problem()->getParameter(PARAM_HEAD "N").intValue();
 
+  std::vector<PathPtr_t> paths(flatten_path->numberPaths());
+  for (auto i = 0ul; i < flatten_path->numberPaths(); ++i)
+    paths[i] = flatten_path->pathAtRank(i);
+  value_type maxSegmentLength = flatten_path->length() / (value_type)N;
+
+  std::shared_ptr<PathWrapper> pathWrapper(new PathWrapper(flatten_path));
+
   // 1. Compute TOPPRA grid points (in the parameter space).
-  std::vector<value_type> params;
-  params.reserve(N + flatten_path->numberPaths() - 1);
-  value_type dparams = flatten_path->length() / (value_type)N;
   std::vector<size_type> id_subpaths;
   id_subpaths.reserve(flatten_path->numberPaths() + 1);
 
-  std::vector<PathPtr_t> paths(flatten_path->numberPaths());
-  params.push_back(0.);
-  id_subpaths.push_back(0);
-  for (auto i = 0ul; i < flatten_path->numberPaths(); ++i) {
-    const auto subpath = (paths[i] = flatten_path->pathAtRank(i));
-    auto I = subpath->paramRange();
-    size_type n = size_type(std::ceil((I.second - I.first) / dparams));
-    value_type p0 = params.back();
-    for (size_type k = 1; k <= n; ++k)
-      params.push_back(p0 +
-                       ((I.second - I.first) * (value_type)k) / (value_type)n);
-    id_subpaths.push_back(params.size() - 1);
+  toppra::Vector gridpoints;
+  switch(gridpointMethod()) {
+    case EvenlyTimeSpaced:
+      gridpoints = std::move(evenlyTimeSpacedGridpoints(
+            pathWrapper, paths, N, maxSegmentLength, id_subpaths));
+      break;
+    case EvenlyParamSpaced:
+      gridpoints = std::move(evenlySpacedGridpoints(paths, N, maxSegmentLength, id_subpaths));
+      break;
   }
-  toppra::Vector gridpoints(
-      Eigen::Map<toppra::Vector>(params.data(), params.size()));
   N = gridpoints.size() - 1;
 
   // 2. Apply TOPPRA on the full path
-  std::shared_ptr<PathWrapper> pathWrapper(
-      std::make_shared<PathWrapper>(flatten_path));
   toppra::algorithm::TOPPRA algo(v, pathWrapper);
   algo.setN((int)N);
   switch (solver) {
@@ -382,6 +452,13 @@ Problem::declareParameter(ParameterDescription(Parameter::VECTOR,
                                                PARAM_HEAD "accelerationLimits",
                                                "Define the acceleration limits.",
                                                Parameter(vector_t())));
+Problem::declareParameter(ParameterDescription(Parameter::STRING,
+                                               PARAM_HEAD "gridpointMethod",
+                                               "Define the method for generating gridpoints.\n"
+                                               "Accepted values are:\n"
+                                               "  \"param_space\": Evenly spaced in parameter,\n"
+                                               "  \"time_space\": Evenly spaced in time",
+                                               Parameter(std::string("param_space"))));
 Problem::declareParameter(ParameterDescription(Parameter::STRING,
                                                PARAM_HEAD "interpolationMethod",
                                                "Define the interpolation method for the output of TOPPRA.\n"

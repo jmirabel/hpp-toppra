@@ -47,6 +47,10 @@ class TOPPRA : public PathOptimizer {
      ConstantAcceleration,
      Hermite,
    };
+   enum GridpointMethod {
+     EvenlyTimeSpaced,
+     EvenlyParamSpaced,
+   };
 
   static TOPPRAPtr_t create(const ProblemConstPtr_t &p) {
     return TOPPRAPtr_t(new TOPPRA(p));
@@ -65,6 +69,7 @@ class TOPPRA : public PathOptimizer {
  private:
   toppra::LinearConstraintPtrs constraints();
   InterpolationMethod interpolationMethod() const;
+  GridpointMethod gridpointMethod() const;
 };  // class TOPPRA
 
 }  // namespace pathOptimization
