@@ -32,6 +32,8 @@
 
 #include <hpp/core/path-optimizer.hh>
 
+#include <toppra/toppra.hpp>
+
 namespace hpp {
 namespace core {
 namespace pathOptimization {
@@ -54,6 +56,9 @@ class TOPPRA : public PathOptimizer {
 
  protected:
   using PathOptimizer::PathOptimizer;
+
+ private:
+  toppra::LinearConstraintPtrs constraints();
 };  // class TOPPRA
 
 }  // namespace pathOptimization

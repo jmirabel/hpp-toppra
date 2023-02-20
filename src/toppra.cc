@@ -188,31 +188,16 @@ TimeParameterizationPtr_t hermiteCubicSplineParametrization(
   return std::make_shared<TimeParam_t>(spline_coeffs, t);
 }
 
-PathVectorPtr_t TOPPRA::optimize(const PathVectorPtr_t& path) {
-  const size_type solver =
-      problem()->getParameter(PARAM_HEAD "solver").intValue();
+toppra::LinearConstraintPtrs TOPPRA::constraints()
+{
   const value_type effortScale =
       problem()->getParameter(PARAM_HEAD "effortScale").floatValue();
   const value_type velScale =
       problem()->getParameter(PARAM_HEAD "velocityScale").floatValue();
   const vector_t accLimits =
       problem()->getParameter(PARAM_HEAD "accelerationLimits").vectorValue();
-  const std::string interpolationMethod =
-      problem()->getParameter(PARAM_HEAD "interpolationMethod").stringValue();
-  bool constantAcceleration;
-  if (interpolationMethod == "hermite") {
-    constantAcceleration = false;
-  } else if (interpolationMethod == "constant_acceleration") {
-    constantAcceleration = true;
-  } else {
-    std::ostringstream oss;
-    oss << "Invalid interpolation method. Allowed values are 'hermite' and "
-      "'constant_acceleration'. Provided value: " << interpolationMethod;
-    throw std::invalid_argument(oss.str());
-  }
 
-  using pinocchio::Model;
-  const Model& model = problem()->robot()->model();
+  const pinocchio::Model& model = problem()->robot()->model();
 
   using namespace toppra::constraint;
 
@@ -237,13 +222,36 @@ PathVectorPtr_t TOPPRA::optimize(const PathVectorPtr_t& path) {
   // Joint torque limits
   if (effortScale >= 0) {
     auto torqueConstraint =
-        std::make_shared<jointTorque::Pinocchio<Model> >(model);  // No friction
+        std::make_shared<jointTorque::Pinocchio<pinocchio::Model> >(model);  // No friction
     torqueConstraint->lowerBounds(effortScale * torqueConstraint->lowerBounds());
     torqueConstraint->upperBounds(effortScale * torqueConstraint->upperBounds());
     v.push_back(torqueConstraint);
   }
   for (auto& c : v)
     c->discretizationType(toppra::Interpolation);
+
+  return v;
+}
+
+PathVectorPtr_t TOPPRA::optimize(const PathVectorPtr_t& path)
+{
+  const size_type solver =
+      problem()->getParameter(PARAM_HEAD "solver").intValue();
+  const std::string interpolationMethod =
+      problem()->getParameter(PARAM_HEAD "interpolationMethod").stringValue();
+  bool constantAcceleration;
+  if (interpolationMethod == "hermite") {
+    constantAcceleration = false;
+  } else if (interpolationMethod == "constant_acceleration") {
+    constantAcceleration = true;
+  } else {
+    std::ostringstream oss;
+    oss << "Invalid interpolation method. Allowed values are 'hermite' and "
+      "'constant_acceleration'. Provided value: " << interpolationMethod;
+    throw std::invalid_argument(oss.str());
+  }
+
+  toppra::LinearConstraintPtrs v = std::move(constraints());
 
   PathVectorPtr_t flatten_path =
       PathVector::create(path->outputSize(), path->outputDerivativeSize());
