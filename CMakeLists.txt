@@ -69,6 +69,7 @@ else()
   add_library(Catch2::Catch2 ALIAS Catch2)
 endif()
 
+add_subdirectory(python)
 
 add_executable(unittests
   tests/tests.cc
