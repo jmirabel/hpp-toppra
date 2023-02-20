@@ -71,6 +71,7 @@ endif()
 
 add_executable(unittests
   tests/tests.cc
+  tests/test-ill-formed-paths.cc
   src/toppra.cc
 )
 add_test(unittests unittests)

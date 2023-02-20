@@ -1,23 +1,8 @@
-#include <catch2/catch_test_macros.hpp>
-#include <catch2/generators/catch_generators.hpp>
+#include"tests.hh"
 
 #include<iostream>
 #include<pinocchio/multibody/model.hpp>
 #include<hpp/pinocchio/urdf/util.hh>
-
-#include<hpp/core/problem.hh>
-#include<hpp/core/path-vector.hh>
-#include<hpp/core/path/spline.hh>
-#include<hpp/core/steering-method/spline.hh>
-
-#include"../src/toppra.hh"
-
-namespace hc = hpp::core;
-namespace hp = hpp::pinocchio;
-
-typedef hc::steeringMethod::Spline< hc::path::BernsteinBasis, 1 > SteerSplineOrder1;
-typedef hc::steeringMethod::Spline< hc::path::BernsteinBasis, 3 > SteerSplineOrder3;
-typedef hc::steeringMethod::Spline< hc::path::BernsteinBasis, 5 > SteerSplineOrder5;
 
 void print_path_evaluation(hc::PathPtr_t p, int N) {
   hp::vector_t q (p->outputSize()), v(p->outputDerivativeSize()), a(p->outputDerivativeSize());
@@ -103,6 +88,31 @@ hc::PathVectorPtr_t makeQuinticSpline(hc::ProblemPtr_t p, hc::value_type v0, hc:
   return inputPath;
 }
 
+TEST_CASE("Test throw on invalid parameters") {
+  hp::DevicePtr_t device = makeDevice();
+
+  std::string gridpointMethod = GENERATE("time_space", "param_space", "throw: invalid");
+  std::string interpolationMethod = GENERATE("hermite", "constant_acceleration", "throw: invalid");
+  bool expect_throw = (
+      interpolationMethod.compare(0, 5, "throw") == 0
+      ||
+      gridpointMethod.compare(0, 5, "throw") == 0
+  );
+
+  CAPTURE(gridpointMethod, expect_throw);
+
+  auto problem = hc::Problem::create(device);
+  problem->setParameter("PathOptimization/TOPPRA/gridpointMethod", hc::Parameter(gridpointMethod));
+  problem->setParameter("PathOptimization/TOPPRA/interpolationMethod", hc::Parameter(interpolationMethod));
+  hc::PathVectorPtr_t spline = makeCubicSpline(problem);
+  auto opt = hc::pathOptimization::TOPPRA::create(problem);
+  if (expect_throw) {
+    CHECK_THROWS(opt->optimize(spline));
+  } else {
+    CHECK_NOTHROW(opt->optimize(spline));
+  }
+}
+
 TEST_CASE("Test parameters") {
   hp::DevicePtr_t device = makeDevice();
 
@@ -126,9 +136,89 @@ TEST_CASE("Test parameters") {
   accLimits << accLimit;
   problem->setParameter("PathOptimization/TOPPRA/accelerationLimits", hc::Parameter(accLimits));
   CHECK_NOTHROW(opt->optimize(spline));
+}
 
-  problem->setParameter("PathOptimization/TOPPRA/interpolationMethod", hc::Parameter(std::string("not_an_interpolation_method")));
-  CHECK_THROWS(opt->optimize(spline));
+void problemParameterToCatch2Info(hc::ProblemPtr_t problem) {
+#define PARAM(name, type) \
+  INFO(#name ": " << problem->getParameter("PathOptimization/TOPPRA/" #name).type ## Value());
+
+  PARAM(gridpointMethod, string);
+  PARAM(interpolationMethod, string);
+  PARAM(accelerationLimits, vector);
+  PARAM(N, int);
+
+#undef PARAM
+}
+
+TEST_CASE("Run TOPPRA optimizer: all cases") {
+  hp::DevicePtr_t device = makeDevice();
+  auto problem = hc::Problem::create(device);
+
+  std::vector<hc::PathVectorPtr_t> inputPaths = {
+      makeCubicSpline(problem),
+      makeQuinticSpline(problem, 0.2, 0.2),
+      makeQuinticSpline(problem, 0.0, 0.1),
+  };
+
+  int iInputPath = GENERATE(0, 1, 2);
+  hc::PathVectorPtr_t inputPath = inputPaths[iInputPath];
+
+  std::vector<hc::vector_t> accLimitss = {
+    hc::vector_t(),
+    (hc::vector_t(1) << accLimit).finished(),
+  };
+  int iAccLimits = GENERATE(0, 1);
+  hc::vector_t accLimits = accLimitss[iAccLimits];
+
+  std::string interpolationMethod = GENERATE("hermite", "constant_acceleration");
+  std::string gridpointMethod = GENERATE("time_space", "param_space");
+
+  problem->setParameter("PathOptimization/TOPPRA/accelerationLimits", hc::Parameter(accLimits));
+  problem->setParameter("PathOptimization/TOPPRA/interpolationMethod", hc::Parameter(interpolationMethod));
+  problem->setParameter("PathOptimization/TOPPRA/gridpointMethod", hc::Parameter(gridpointMethod));
+  problem->setParameter("PathOptimization/TOPPRA/N", hc::Parameter(hp::size_type(500)));
+  problemParameterToCatch2Info(problem);
+
+  CAPTURE(accLimits, *inputPath);
+
+  auto opt = hc::pathOptimization::TOPPRA::create(problem);
+  auto outputPath = opt->optimize(inputPath);
+
+  check_path_velocity(inputPath);
+
+  hp::vector_t q (device->configSize()), v(device->numberDof()), a(device->numberDof());
+  hp::value_type
+    t0 = outputPath->timeRange().first,
+    t1 = outputPath->timeRange().second;
+
+  // Check that initial and final velocities are zero
+  for (auto t : { t0, t1 }) {
+    outputPath->derivative(v, t, 1);
+    CAPTURE(t, v);
+    CHECK(v.squaredNorm() < 1e-8);
+  }
+  int N = 1000;
+  // TODO
+  // Path::timeParameterization is protected...
+  // see https://github.com/humanoid-path-planner/hpp-core/pull/305
+  // auto param = outputPath->timeParameterization();
+  auto param = opt->lastTimeParameterization_;
+  for (int i = 0; i <= N; ++i) {
+    hc::value_type t = t0 + hc::value_type(i) / N * (t1-t0);
+    hc::value_type
+      s = param->value(t),
+      sd = param->derivative(t, 1),
+      sdd = param->derivative(t, 2);
+    inputPath->derivative(v, s, 1);
+    inputPath->derivative(a, s, 2);
+    CAPTURE(t, s, sd, sdd, v, a);
+
+    outputPath->derivative(v, t, 1);
+    outputPath->derivative(a, t, 2);
+    CHECK(v[0] < velLimit * constraintRelativeTol);
+    if (accLimits.size() > 0)
+      CHECK(a[0] < accLimits[0]*constraintRelativeTol);
+  }
 }
 
 TEST_CASE("Run TOPPRA optimizer") {
