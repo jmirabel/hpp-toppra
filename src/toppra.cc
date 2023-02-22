@@ -260,13 +260,27 @@ toppra::Vector evenlyTimeSpacedGridpoints(
 }
 
 void TOPPRA::inputSerialization(PathPtr_t path) const {
-  const std::string filename =
+  std::string filename =
       problem()->getParameter(PARAM_HEAD "inputSerialization").stringValue();
   if (filename.size() == 0)
     return;
 
+  bool textFormat = (filename.size() > 4
+                     && filename.substr(filename.size() - 4) == ".txt");
+
+  // Find a non existent filename
+  const std::string basename (filename);
+  int i = 1;
+  while (std::ifstream(filename).is_open()) {
+    std::ostringstream oss;
+    oss << basename << i;
+    filename = oss.str();
+    i += 1;
+  }
+  std::cout << "saving to " << filename << '\n';
+
   DevicePtr_t device(problem()->robot());
-  if (filename.substr(filename.size() - 4) == ".txt")
+  if (textFormat)
     parser::serializePath<serialization::text_oarchive>(device, path, filename);
   else
     parser::serializePath<serialization::binary_oarchive>(device, path, filename);
