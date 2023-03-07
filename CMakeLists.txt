@@ -21,6 +21,7 @@ include(cmake/boost.cmake)
 compute_project_args(PROJECT_ARGS LANGUAGES CXX)
 project(${PROJECT_NAME} ${PROJECT_ARGS})
 
+set(CMAKE_CXX_STANDARD 14)
 add_project_dependency(hpp-core REQUIRED)
 add_project_dependency(hpp-manipulation REQUIRED)
 add_project_dependency(toppra REQUIRED)
