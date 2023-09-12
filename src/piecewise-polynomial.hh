@@ -1,5 +1,7 @@
 #include <hpp/core/time-parameterization/piecewise-polynomial.hh>
 
+#include <iomanip>
+
 namespace hpp {
 namespace core {
 namespace timeParameterization {
@@ -97,15 +99,31 @@ class HPP_CORE_DLLAPI ShiftedPiecewisePolynomial : public TimeParameterization {
 
   size_t findPolynomialIndex(value_type& t) const {
     size_t seg_index = std::numeric_limits<size_t>::max();
-    for (int i = 0; i < parameters_.cols(); ++i) {
-      if (breakpoints_[i] <= t && t <= breakpoints_[i + 1]) {
-        seg_index = i;
-        break;
+    const value_type dummy_precision = Eigen::NumTraits<value_type>::dummy_precision();
+    if (t < breakpoints_[0]) {
+      if (t > breakpoints_[0] - dummy_precision) {
+        t -= breakpoints_[0];
+        return 0;
+      }
+    } else if (t > breakpoints_[breakpoints_.size() - 1]) {
+      if (t < breakpoints_[breakpoints_.size() - 1] + dummy_precision) {
+        t -= breakpoints_[breakpoints_.size() - 1];
+        return breakpoints_.size() - 1;
+      }
+    } else {
+      // TODO We should use std::lower_bound instead.
+      for (int i = 0; i < parameters_.cols(); ++i) {
+        if (breakpoints_[i] <= t && t <= breakpoints_[i + 1]) {
+          seg_index = i;
+          break;
+        }
       }
     }
     if (seg_index == std::numeric_limits<size_t>::max()) {
       std::ostringstream oss;
-      oss << "Position " << t << " is outside of range [ " << breakpoints_[0]
+      constexpr auto max_precision {std::numeric_limits<value_type>::digits10 + 1};
+      oss << std::setprecision(max_precision) << "Position " << t <<
+        " is outside of range [ " << breakpoints_[0]
           << ", " << breakpoints_[breakpoints_.size() - 1] << ']';
       throw std::runtime_error(oss.str());
     }
