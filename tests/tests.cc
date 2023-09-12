@@ -5,6 +5,8 @@
 #include<pinocchio/multibody/model.hpp>
 #include<hpp/pinocchio/urdf/util.hh>
 
+#include "../src/piecewise-polynomial.hh"
+
 void print_path_evaluation(hc::PathPtr_t p, int N) {
   hp::vector_t q (p->outputSize()), v(p->outputDerivativeSize()), a(p->outputDerivativeSize());
   hp::value_type
@@ -292,4 +294,23 @@ TEST_CASE("Run TOPPRA optimizer") {
     if (accLimits.size() > 0)
       CHECK(a[0] < accLimits[0]*constraintRelativeTol);
   }
+}
+
+TEST_CASE("PiecewisePolynomial") {
+  constexpr int order = 2;
+  constexpr int N = 4;
+  typedef hc::timeParameterization::ShiftedPiecewisePolynomial<order> TimeParam_t;
+  auto c = TimeParam_t::ParameterMatrix_t(order + 1, N);
+  c << 0.0, 1.0, 2.0, 3.0,
+       0.5, 0.5, 0.5, 0.5,
+       0.5,-0.5, 0.5,-0.5;
+  hp::vector_t t(N+1);
+  t << 5.0, 7.0, 7.5, 8.0, 12.0;
+
+  TimeParam_t param(c, t);
+
+  CHECK_NOTHROW(param.value(6.0));
+  CHECK_THROWS(param.value(4.0));
+  CHECK_NOTHROW(param.value(t[0] - 0.5 * Eigen::NumTraits<hc::value_type>::dummy_precision()));
+  CHECK_THROWS(param.value(t[0] - 2 * Eigen::NumTraits<hc::value_type>::dummy_precision()));
 }
