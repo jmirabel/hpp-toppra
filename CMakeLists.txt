@@ -24,7 +24,7 @@ project(${PROJECT_NAME} ${PROJECT_ARGS})
 set(CMAKE_CXX_STANDARD 14)
 add_project_dependency(hpp-core REQUIRED)
 add_project_dependency(hpp-manipulation REQUIRED)
-add_project_dependency(toppra REQUIRED)
+add_project_dependency(toppra 0.6.2 REQUIRED)
 
 include(${HPP_CORE_CMAKE_PLUGIN})
 

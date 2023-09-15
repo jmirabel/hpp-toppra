@@ -398,7 +398,7 @@ PathVectorPtr_t TOPPRA::optimize(const PathVectorPtr_t& path)
   if (ret_code != toppra::ReturnCode::OK) {
     std::stringstream ss;
     ss << "TOPPRA failed, returned code: " << static_cast<int>(ret_code)
-       << std::endl;
+       << '\n' << algo.getErrorMessage();
     throw std::runtime_error(ss.str());
   }
   const auto out_data = algo.getParameterizationData();
