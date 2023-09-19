@@ -1,7 +1,7 @@
 <?xml version='1.0'?>
  <package format='2'>
  <name>hpp-toppra</name>
- <version>0.1.3</version>
+ <version>0.1.4</version>
  <description>Bridge between HPP and TOPPRA</description>
 
  <maintainer email='jmirabel@eurekarobotics.com'>Joseph Mirabel</maintainer>
