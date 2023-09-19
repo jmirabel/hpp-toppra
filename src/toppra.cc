@@ -23,7 +23,6 @@
 
 #include "piecewise-polynomial.hh"
 #include "serialization.hh"
-#include <hpp/toppra/configuration-shooter.hh>
 
 namespace hpp {
 namespace toppra {
