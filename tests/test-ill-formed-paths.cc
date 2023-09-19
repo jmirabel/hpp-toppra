@@ -24,7 +24,7 @@ TEST_CASE("Path of length 0") {
   if (addPathAfter)
     pv->appendPath(hc::StraightPath::create(device, q2, q3, 1.));
 
-  auto opt = hc::pathOptimization::TOPPRA::create(problem);
+  auto opt = ht::pathOptimization::TOPPRA::create(problem);
   hc::PathVectorPtr_t res;
   CHECK_NOTHROW(res = opt->optimize(pv));
   if (!addPathBefore && !addPathAfter)

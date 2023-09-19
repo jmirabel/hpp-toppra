@@ -1,11 +1,10 @@
-#include "toppra.hh"
+#include <hpp/toppra/toppra.hh>
 
 #include <sstream>
 
 #include <hpp/core/path-optimizer.hh>
 #include <hpp/core/path-vector.hh>
 #include <hpp/core/path.hh>
-#include <hpp/core/plugin.hh>
 #include <hpp/core/problem-solver.hh>
 #include <hpp/core/problem.hh>
 #include <hpp/core/time-parameterization/piecewise-polynomial.hh>
@@ -24,20 +23,23 @@
 
 #include "piecewise-polynomial.hh"
 #include "serialization.hh"
+#include <hpp/toppra/configuration-shooter.hh>
 
 namespace hpp {
-namespace core {
+namespace toppra {
 
-class PathWrapper : public toppra::GeometricPath {
+using namespace hpp::core;
+
+class PathWrapper : public ::toppra::GeometricPath {
  public:
   PathWrapper(PathPtr_t path)
-      : toppra::GeometricPath((int)path->outputSize(),
+      : ::toppra::GeometricPath((int)path->outputSize(),
                               (int)path->outputDerivativeSize()),
         path_(path) {}
 
-  toppra::Vector eval_single(toppra::value_type time, int order) const {
+  ::toppra::Vector eval_single(::toppra::value_type time, int order) const {
     bool success;
-    toppra::Vector res;
+    ::toppra::Vector res;
     if (order == 0) {
       res = path_->eval(time, success);
       assert(success);
@@ -48,9 +50,9 @@ class PathWrapper : public toppra::GeometricPath {
     return res;
   }
 
-  toppra::Bound pathInterval() const {
+  ::toppra::Bound pathInterval() const {
     const interval_t& tr = path_->timeRange();
-    return (toppra::Bound() << tr.first, tr.second).finished();
+    return (::toppra::Bound() << tr.first, tr.second).finished();
   }
 
  private:
@@ -91,9 +93,9 @@ class Extract : public TimeParameterization {
 namespace pathOptimization {
 
 TimeParameterizationPtr_t constantAccelerationParametrization(
-    toppra::Vector const& t,
-    toppra::Vector const& s,
-    toppra::Vector const& sd)
+    ::toppra::Vector const& t,
+    ::toppra::Vector const& s,
+    ::toppra::Vector const& sd)
 {
   // Inputs
   // int N
@@ -111,7 +113,7 @@ TimeParameterizationPtr_t constantAccelerationParametrization(
   // c_1 + 2 c_2 t[i] = sd[i]
   // c_0 + c_1 t[i] + c_2 t[i]**2 = s[i]
   constexpr int order = 2;
-  typedef timeParameterization::ShiftedPiecewisePolynomial<order> TimeParam_t;
+  typedef core::timeParameterization::ShiftedPiecewisePolynomial<order> TimeParam_t;
   auto c = TimeParam_t::ParameterMatrix_t(order + 1, N);
   for (size_type i = 0; i < N; ++i) {
     c(2, i) = (sd[i+1] - sd[i]) * (sd[i+1] + sd[i]) / (s[i+1] - s[i]) / 4;
@@ -123,9 +125,9 @@ TimeParameterizationPtr_t constantAccelerationParametrization(
 }
 
 TimeParameterizationPtr_t hermiteCubicSplineParametrization(
-    toppra::Vector const& t,
-    toppra::Vector const& s,
-    toppra::Vector const& sd)
+    ::toppra::Vector const& t,
+    ::toppra::Vector const& s,
+    ::toppra::Vector const& sd)
 {
   // Inputs
   // int N
@@ -134,7 +136,7 @@ TimeParameterizationPtr_t hermiteCubicSplineParametrization(
   const size_type N = t.size() - 1;
 
   constexpr int order = 3;
-  typedef timeParameterization::PiecewisePolynomial<order> TimeParam_t;
+  typedef core::timeParameterization::PiecewisePolynomial<order> TimeParam_t;
   auto spline_coeffs = TimeParam_t::ParameterMatrix_t(order + 1, N);
   for (size_type i = 1; i <= N; ++i) {
     const auto inv_dt = 1. / (t[i] - t[i - 1]);
@@ -162,7 +164,7 @@ TimeParameterizationPtr_t hermiteCubicSplineParametrization(
 
 /// \param[out] id_subpaths \c id_subpaths[i] the index in gridpoints that
 ///             corresponds to the start of \c paths[i]
-toppra::Vector evenlySpacedGridpoints(
+::toppra::Vector evenlySpacedGridpoints(
     std::vector<PathPtr_t> const& paths,
     size_type const N,
     value_type const maxSegmentLength,
@@ -184,19 +186,19 @@ toppra::Vector evenlySpacedGridpoints(
       S.push_back(p0 + (pathS * (value_type)k) / (value_type)n);
     id_subpaths.push_back(S.size() - 1);
   }
-  return toppra::Vector(Eigen::Map<toppra::Vector>(S.data(), S.size()));
+  return ::toppra::Vector(Eigen::Map<::toppra::Vector>(S.data(), S.size()));
 }
 
 /// \param[out] id_subpaths \c id_subpaths[i] the index in gridpoints that
 ///             corresponds to the start of \c paths[i]
-toppra::Vector evenlyTimeSpacedGridpoints(
+::toppra::Vector evenlyTimeSpacedGridpoints(
     std::shared_ptr<PathWrapper> pathWrapper,
     std::vector<PathPtr_t> const& paths,
     size_type const N,
     value_type const maxSegmentLength,
     std::vector<size_type>& id_subpaths)
 {
-  toppra::Vector initialS(paths.size() + 1);
+  ::toppra::Vector initialS(paths.size() + 1);
 
   //id_subpaths.reserve(paths.size() + 1);
 
@@ -207,7 +209,7 @@ toppra::Vector evenlyTimeSpacedGridpoints(
 
   const double maxErrorThreshold = 1e-4;
   const int maxIterations = 100;
-  toppra::Vector gridpoints (pathWrapper->proposeGridpoints(
+  ::toppra::Vector gridpoints (pathWrapper->proposeGridpoints(
       maxErrorThreshold,
       maxIterations,
       maxSegmentLength,
@@ -257,7 +259,7 @@ void TOPPRA::inputSerialization(PathPtr_t path) const {
     parser::serializePath<serialization::binary_oarchive>(device, path, filename);
 }
 
-toppra::LinearConstraintPtrs TOPPRA::constraints()
+::toppra::LinearConstraintPtrs TOPPRA::constraints()
 {
   const value_type effortScale =
       problem()->getParameter(PARAM_HEAD "effortScale").floatValue();
@@ -268,10 +270,10 @@ toppra::LinearConstraintPtrs TOPPRA::constraints()
 
   const pinocchio::Model& model = problem()->robot()->model();
 
-  using namespace toppra::constraint;
+  using namespace ::toppra::constraint;
 
   // Create the TOPPRA constraints
-  toppra::LinearConstraintPtrs v;
+  ::toppra::LinearConstraintPtrs v;
 
   // Joint velocity limits
   v.push_back(
@@ -297,7 +299,7 @@ toppra::LinearConstraintPtrs TOPPRA::constraints()
     v.push_back(torqueConstraint);
   }
   for (auto& c : v)
-    c->discretizationType(toppra::Interpolation);
+    c->discretizationType(::toppra::Interpolation);
 
   return v;
 }
@@ -341,7 +343,7 @@ PathVectorPtr_t TOPPRA::optimize(const PathVectorPtr_t& path)
   const size_type solver =
       problem()->getParameter(PARAM_HEAD "solver").intValue();
 
-  toppra::LinearConstraintPtrs v = std::move(constraints());
+  ::toppra::LinearConstraintPtrs v = std::move(constraints());
 
   PathVectorPtr_t flatten_path =
       PathVector::create(path->outputSize(), path->outputDerivativeSize());
@@ -365,7 +367,7 @@ PathVectorPtr_t TOPPRA::optimize(const PathVectorPtr_t& path)
   std::vector<size_type> id_subpaths;
   id_subpaths.reserve(flatten_path->numberPaths() + 1);
 
-  toppra::Vector gridpoints;
+  ::toppra::Vector gridpoints;
   switch(gridpointMethod()) {
     case EvenlyTimeSpaced:
       gridpoints = std::move(evenlyTimeSpacedGridpoints(
@@ -378,32 +380,32 @@ PathVectorPtr_t TOPPRA::optimize(const PathVectorPtr_t& path)
   N = gridpoints.size() - 1;
 
   // 2. Apply TOPPRA on the full path
-  toppra::algorithm::TOPPRA algo(v, pathWrapper);
+  ::toppra::algorithm::TOPPRA algo(v, pathWrapper);
   algo.setN((int)N);
   switch (solver) {
     default:
       hppDout(error, "Solver " << solver << " does not exists. Using Seidel");
     case 0:
-      algo.solver(std::make_shared<toppra::solver::Seidel>());
+      algo.solver(std::make_shared<::toppra::solver::Seidel>());
       break;
     case 1:
-      algo.solver(std::make_shared<toppra::solver::GLPKWrapper>());
+      algo.solver(std::make_shared<::toppra::solver::GLPKWrapper>());
       break;
     case 2:
-      algo.solver(std::make_shared<toppra::solver::qpOASESWrapper>());
+      algo.solver(std::make_shared<::toppra::solver::qpOASESWrapper>());
       break;
   }
   algo.setGridpoints(gridpoints);
   auto ret_code = algo.computePathParametrization();
-  if (ret_code != toppra::ReturnCode::OK) {
+  if (ret_code != ::toppra::ReturnCode::OK) {
     std::stringstream ss;
     ss << "TOPPRA failed, returned code: " << static_cast<int>(ret_code)
-       << std::endl;
+       << '\n' << algo.getErrorMessage();
     throw std::runtime_error(ss.str());
   }
   const auto out_data = algo.getParameterizationData();
   assert(out_data.gridpoints.size() == out_data.parametrization.size());
-  toppra::Vector sd(out_data.parametrization.cwiseMax(0.).cwiseSqrt());
+  ::toppra::Vector sd(out_data.parametrization.cwiseMax(0.).cwiseSqrt());
 
   // 3. Build the parameterization function and apply it on each subpaths.
   PathVectorPtr_t res =
@@ -490,17 +492,5 @@ Problem::declareParameter(ParameterDescription(Parameter::STRING,
 HPP_END_PARAMETER_DECLARATION(TOPPRA)
 }  // namespace pathOptimization
 
-class TOPPRAPlugin : public ProblemSolverPlugin {
- public:
-  TOPPRAPlugin() : ProblemSolverPlugin("TOPPRAPlugin", "0.0") {}
-
- protected:
-  virtual bool impl_initialize(ProblemSolverPtr_t ps) {
-    ps->pathOptimizers.add("TOPPRA", pathOptimization::TOPPRA::create);
-    return true;
-  }
-};
-}  // namespace core
+}  // namespace toppra
 }  // namespace hpp
-
-HPP_CORE_DEFINE_PLUGIN(hpp::core::TOPPRAPlugin)
