@@ -1,18 +1,18 @@
-#ifndef HPP_CORE_PATH_OPTIMIZATION_TOPPRA_HH
-#define HPP_CORE_PATH_OPTIMIZATION_TOPPRA_HH
+#ifndef HPP_TOPPRA_PATH_OPTIMIZATION_TOPPRA_HH
+#define HPP_TOPPRA_PATH_OPTIMIZATION_TOPPRA_HH
 
 #include <hpp/core/path-optimizer.hh>
 
 #include <toppra/toppra.hpp>
 
 namespace hpp {
-namespace core {
+namespace toppra {
 namespace pathOptimization {
 
 class TOPPRA;
 typedef shared_ptr<TOPPRA> TOPPRAPtr_t;
 
-class TOPPRA : public PathOptimizer {
+class TOPPRA : public core::PathOptimizer {
  public:
    enum InterpolationMethod {
      ConstantAcceleration,
@@ -23,29 +23,29 @@ class TOPPRA : public PathOptimizer {
      EvenlyParamSpaced,
    };
 
-  static TOPPRAPtr_t create(const ProblemConstPtr_t &p) {
+  static TOPPRAPtr_t create(const core::ProblemConstPtr_t &p) {
     return TOPPRAPtr_t(new TOPPRA(p));
   }
 
-  PathVectorPtr_t optimize(const PathVectorPtr_t &path);
+  core::PathVectorPtr_t optimize(const core::PathVectorPtr_t &path);
 
   // TODO remove when
   // https://github.com/humanoid-path-planner/hpp-core/pull/305
   // is released.
-  TimeParameterizationPtr_t lastTimeParameterization_;
+  core::TimeParameterizationPtr_t lastTimeParameterization_;
 
  protected:
-  using PathOptimizer::PathOptimizer;
+  using core::PathOptimizer::PathOptimizer;
 
  private:
-  void inputSerialization(PathPtr_t path) const;
-  toppra::LinearConstraintPtrs constraints();
+  void inputSerialization(core::PathPtr_t path) const;
+  ::toppra::LinearConstraintPtrs constraints();
   InterpolationMethod interpolationMethod() const;
   GridpointMethod gridpointMethod() const;
 };  // class TOPPRA
 
 }  // namespace pathOptimization
-}  // namespace core
+}  // namespace toppra
 }  // namespace hpp
 
-#endif  // HPP_CORE_PATH_OPTIMIZATION_TOPPRA_HH
+#endif  // HPP_TOPPRA_PATH_OPTIMIZATION_TOPPRA_HH

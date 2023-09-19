@@ -108,7 +108,7 @@ TEST_CASE("Test throw on invalid parameters") {
   problem->setParameter("PathOptimization/TOPPRA/gridpointMethod", hc::Parameter(gridpointMethod));
   problem->setParameter("PathOptimization/TOPPRA/interpolationMethod", hc::Parameter(interpolationMethod));
   hc::PathVectorPtr_t spline = makeCubicSpline(problem);
-  auto opt = hc::pathOptimization::TOPPRA::create(problem);
+  auto opt = ht::pathOptimization::TOPPRA::create(problem);
   if (expect_throw) {
     CHECK_THROWS(opt->optimize(spline));
   } else {
@@ -121,7 +121,7 @@ TEST_CASE("Test parameters") {
 
   auto problem = hc::Problem::create(device);
   hc::PathVectorPtr_t spline = makeCubicSpline(problem);
-  auto opt = hc::pathOptimization::TOPPRA::create(problem);
+  auto opt = ht::pathOptimization::TOPPRA::create(problem);
   hp::vector_t accLimits;
 
   problem->setParameter("PathOptimization/TOPPRA/interpolationMethod", hc::Parameter(std::string("hermite")));
@@ -184,7 +184,7 @@ TEST_CASE("Run TOPPRA optimizer: all cases") {
 
   CAPTURE(accLimits, *inputPath);
 
-  auto opt = hc::pathOptimization::TOPPRA::create(problem);
+  auto opt = ht::pathOptimization::TOPPRA::create(problem);
   auto outputPath = opt->optimize(inputPath);
 
   check_path_velocity(inputPath);
@@ -257,7 +257,7 @@ TEST_CASE("Run TOPPRA optimizer") {
   problem->setParameter("PathOptimization/TOPPRA/N", hc::Parameter(hp::size_type(500)));
 
   auto inputPath = paths[iPath];
-  auto opt = hc::pathOptimization::TOPPRA::create(problem);
+  auto opt = ht::pathOptimization::TOPPRA::create(problem);
   auto outputPath = opt->optimize(inputPath);
 
   check_path_velocity(inputPath);
